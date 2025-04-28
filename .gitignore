@@ -1,0 +1,12 @@
+# Compiled binaries
+test
+*.o
+*.out
+
+# Temporary files
+*.log
+*.swp
+*~
+
+# Build directories
+build/
