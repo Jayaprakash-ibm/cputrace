@@ -5,6 +5,11 @@
 #include <sys/ioctl.h>
 #include <linux/perf_event.h>
 #include <asm/unistd.h>
+#include <algorithm>
+#include <cmath>
+#include <vector>
+#include <iomanip>
+#include <sstream>
 #include "perfmon.h"
 
 static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
@@ -132,4 +137,169 @@ void HW_clean(HW_ctx *ctx) {
     if (ctx->conf.capture_bmiss && ctx->fd_bmiss != -1) close(ctx->fd_bmiss);
     if (ctx->conf.capture_ins && ctx->fd_ins != -1) close(ctx->fd_ins);
     ctx->initialized = false;
+}
+
+void print_perf_stats(const PerfSamples& samples) {
+    printf("Function %s:\n", samples.func_name.c_str());
+
+    auto compute_stats = [](const std::vector<long long>& values, long long& avg, double& stdev, long long& p99) {
+        if (values.empty()) {
+            avg = 0;
+            stdev = 0.0;
+            p99 = 0;
+            return 0;
+        }
+        size_t n = values.size();
+
+        long long sum = 0;
+        for (long long v : values) sum += v;
+        avg = n > 0 ? sum / n : 0;
+
+        double variance = 0;
+        for (long long v : values) {
+            double diff = v - avg;
+            variance += diff * diff;
+        }
+        variance = n > 0 ? variance / n : 0;
+        stdev = std::sqrt(variance);
+
+        std::vector<long long> sorted = values;
+        std::sort(sorted.begin(), sorted.end());
+        size_t p99_index = static_cast<size_t>(std::ceil(n * 0.99)) - 1;
+        p99 = n > 0 ? sorted[p99_index] : 0;
+
+        return static_cast<int>(n);
+    };
+
+    // Table formatting
+    const int col1_width = 15; // Counter
+    const int col2_width = 10; // Samples
+    const int col3_width = 20; // Average
+    const int col4_width = 18; // StdDev
+    const int col5_width = 18; // P99
+
+    // Print header
+    printf("+%s+%s+%s+%s+%s+\n",
+           std::string(col1_width, '-').c_str(),
+           std::string(col2_width, '-').c_str(),
+           std::string(col3_width, '-').c_str(),
+           std::string(col4_width, '-').c_str(),
+           std::string(col5_width, '-').c_str());
+    printf("| %-*s | %-*s | %-*s | %-*s | %-*s |\n",
+           col1_width, "Counter",
+           col2_width, "Samples",
+           col3_width, "Average",
+           col4_width, "StdDev",
+           col5_width, "P99");
+    printf("+%s+%s+%s+%s+%s+\n",
+           std::string(col1_width, '-').c_str(),
+           std::string(col2_width, '-').c_str(),
+           std::string(col3_width, '-').c_str(),
+           std::string(col4_width, '-').c_str(),
+           std::string(col5_width, '-').c_str());
+
+    std::vector<long long> values;
+    long long avg = 0;
+    double stdev = 0.0;
+    long long p99 = 0;
+
+    if (samples.conf.capture_cyc) {
+        values.clear();
+        for (const auto& s : samples.samples) {
+            values.push_back(s.cyc);
+        }
+        int n = compute_stats(values, avg, stdev, p99);
+        std::ostringstream stdev_ss;
+        stdev_ss << std::fixed << std::setprecision(6) << stdev;
+        printf("| %-*s | %*d | %*lld | %*s | %*lld |\n",
+               col1_width, "cycles",
+               col2_width, n,
+               col3_width, avg,
+               col4_width, stdev_ss.str().c_str(),
+               col5_width, p99);
+    }
+
+    if (samples.conf.capture_swi) {
+        values.clear();
+        avg = 0;
+        stdev = 0.0;
+        p99 = 0;
+        for (const auto& s : samples.samples) {
+            values.push_back(s.swi);
+        }
+        int n = compute_stats(values, avg, stdev, p99);
+        std::ostringstream stdev_ss;
+        stdev_ss << std::fixed << std::setprecision(6) << stdev;
+        printf("| %-*s | %*d | %*lld | %*s | %*lld |\n",
+               col1_width, "cpu_migrations",
+               col2_width, n,
+               col3_width, avg,
+               col4_width, stdev_ss.str().c_str(),
+               col5_width, p99);
+    }
+
+    if (samples.conf.capture_cmiss) {
+        values.clear();
+        avg = 0;
+        stdev = 0.0;
+        p99 = 0;
+        for (const auto& s : samples.samples) {
+            values.push_back(s.cmiss);
+        }
+        int n = compute_stats(values, avg, stdev, p99);
+        std::ostringstream stdev_ss;
+        stdev_ss << std::fixed << std::setprecision(6) << stdev;
+        printf("| %-*s | %*d | %*lld | %*s | %*lld |\n",
+               col1_width, "cache_misses",
+               col2_width, n,
+               col3_width, avg,
+               col4_width, stdev_ss.str().c_str(),
+               col5_width, p99);
+    }
+
+    if (samples.conf.capture_bmiss) {
+        values.clear();
+        avg = 0;
+        stdev = 0.0;
+        p99 = 0;
+        for (const auto& s : samples.samples) {
+            values.push_back(s.bmiss);
+        }
+        int n = compute_stats(values, avg, stdev, p99);
+        std::ostringstream stdev_ss;
+        stdev_ss << std::fixed << std::setprecision(6) << stdev;
+        printf("| %-*s | %*d | %*lld | %*s | %*lld |\n",
+               col1_width, "branch_misses",
+               col2_width, n,
+               col3_width, avg,
+               col4_width, stdev_ss.str().c_str(),
+               col5_width, p99);
+    }
+
+    if (samples.conf.capture_ins) {
+        values.clear();
+        avg = 0;
+        stdev = 0.0;
+        p99 = 0;
+        for (const auto& s : samples.samples) {
+            values.push_back(s.ins);
+        }
+        int n = compute_stats(values, avg, stdev, p99);
+        std::ostringstream stdev_ss;
+        stdev_ss << std::fixed << std::setprecision(6) << stdev;
+        printf("| %-*s | %*d | %*lld | %*s | %*lld |\n",
+               col1_width, "instructions",
+               col2_width, n,
+               col3_width, avg,
+               col4_width, stdev_ss.str().c_str(),
+               col5_width, p99);
+    }
+
+    // Print footer
+    printf("+%s+%s+%s+%s+%s+\n",
+           std::string(col1_width, '-').c_str(),
+           std::string(col2_width, '-').c_str(),
+           std::string(col3_width, '-').c_str(),
+           std::string(col4_width, '-').c_str(),
+           std::string(col5_width, '-').c_str());
 }
