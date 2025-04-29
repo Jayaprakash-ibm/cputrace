@@ -172,7 +172,7 @@ void print_perf_stats(const PerfSamples& samples) {
     };
 
     // Table formatting
-    const int col1_width = 15; // Counter
+    const int col1_width = 18; // Counter
     const int col2_width = 10; // Samples
     const int col3_width = 20; // Average
     const int col4_width = 18; // StdDev
@@ -231,7 +231,7 @@ void print_perf_stats(const PerfSamples& samples) {
         std::ostringstream stdev_ss;
         stdev_ss << std::fixed << std::setprecision(6) << stdev;
         printf("| %-*s | %*d | %*lld | %*s | %*lld |\n",
-               col1_width, "cpu_migrations",
+               col1_width, "context switches",
                col2_width, n,
                col3_width, avg,
                col4_width, stdev_ss.str().c_str(),
