@@ -18,13 +18,13 @@ int main() {
 
     HW_init(&ctx, conf);
 
+    HW_start(&ctx);
     for (int i = 0; i < 100; i++) {
-        HW_start(&ctx);
         my_func_1();
-        HW_stop(&ctx, &measure);
-	samples.add_sample(measure);
     }
     
+    HW_stop(&ctx, &measure);
+    samples.add_sample(measure);
     print_perf_stats(samples);
 
     HW_clean(&ctx);

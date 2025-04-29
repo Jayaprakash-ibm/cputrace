@@ -29,13 +29,13 @@ void HW_init(HW_ctx *ctx, HW_conf conf) {
     memset(&pe, 0, sizeof(struct perf_event_attr));
     pe.size = sizeof(struct perf_event_attr);
     pe.disabled = 1;
-    pe.exclude_kernel = 1;
     pe.exclude_hv = 1;
 
     // Initialize counters based on configuration
     if (conf.capture_swi) {
         pe.type = PERF_TYPE_SOFTWARE;
         pe.config = PERF_COUNT_SW_CONTEXT_SWITCHES;
+	pe.exclude_kernel = 0;
         ctx->fd_swi = perf_event_open(&pe, 0, -1, -1, 0);
         if (ctx->fd_swi == -1) {
             perror("Error opening context switches event");
@@ -45,6 +45,7 @@ void HW_init(HW_ctx *ctx, HW_conf conf) {
     if (conf.capture_cyc) {
         pe.type = PERF_TYPE_HARDWARE;
         pe.config = PERF_COUNT_HW_CPU_CYCLES;
+	pe.exclude_kernel = 1;
         ctx->fd_cyc = perf_event_open(&pe, 0, -1, -1, 0);
         if (ctx->fd_cyc == -1) {
             perror("Error opening cycles event");
@@ -54,6 +55,7 @@ void HW_init(HW_ctx *ctx, HW_conf conf) {
     if (conf.capture_cmiss) {
         pe.type = PERF_TYPE_HARDWARE;
         pe.config = PERF_COUNT_HW_CACHE_MISSES;
+	pe.exclude_kernel = 1;
         ctx->fd_cmiss = perf_event_open(&pe, 0, -1, -1, 0);
         if (ctx->fd_cmiss == -1) {
             perror("Error opening cache misses event");
@@ -63,6 +65,7 @@ void HW_init(HW_ctx *ctx, HW_conf conf) {
     if (conf.capture_bmiss) {
         pe.type = PERF_TYPE_HARDWARE;
         pe.config = PERF_COUNT_HW_BRANCH_MISSES;
+	pe.exclude_kernel = 1;
         ctx->fd_bmiss = perf_event_open(&pe, 0, -1, -1, 0);
         if (ctx->fd_bmiss == -1) {
             perror("Error opening branch mispredictions event");
@@ -72,6 +75,7 @@ void HW_init(HW_ctx *ctx, HW_conf conf) {
     if (conf.capture_ins) {
         pe.type = PERF_TYPE_HARDWARE;
         pe.config = PERF_COUNT_HW_INSTRUCTIONS;
+	pe.exclude_kernel = 1;
         ctx->fd_ins = perf_event_open(&pe, 0, -1, -1, 0);
         if (ctx->fd_ins == -1) {
             perror("Error opening instructions event");
