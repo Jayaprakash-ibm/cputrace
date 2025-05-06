@@ -11,12 +11,9 @@ void my_func_1() {
 
 int main() {
     HW_ctx ctx = {0};
-    HW_conf conf = {true, true, false, false, false}; // Enable swi and cyc
-    HW_metrics measure = {0};
-
-    PerfSamples samples("my_func_1", conf);
-
-    HW_init(&ctx, conf);
+    HW_conf conf = {true, true, true, true, true}; // Enable swi and cyc
+    HW_measure measure = {0};
+    HW_init(&ctx, &conf);
 
     HW_start(&ctx);
     for (int i = 0; i < 100; i++) {
@@ -24,9 +21,11 @@ int main() {
     }
     
     HW_stop(&ctx, &measure);
-    samples.add_sample(measure);
-    print_perf_stats(samples);
-
+    printf("swi: %lld\n", measure.swi);
+    printf("cyc: %lld\n", measure.cyc);
+    printf("cmiss: %lld\n", measure.cmiss);
+    printf("bmiss: %lld\n", measure.bmiss);
+    printf("ins: %lld\n", measure.ins);
     HW_clean(&ctx);
     return 0;
 }
