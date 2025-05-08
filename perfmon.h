@@ -1,7 +1,17 @@
 #ifndef PERFMON_H
 #define PERFMON_H
 
-struct HW_conf{
+#include <pthread.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <linux/perf_event.h>
+#include <cstdio>
+
+// Maximum number of threads and anchors (functions) to profile
+#define PERFMON_MAX_THREADS 64
+#define PERFMON_MAX_ANCHORS 128
+
+struct HW_conf {
     bool capture_swi;
     bool capture_cyc;
     bool capture_cmiss;
@@ -9,7 +19,7 @@ struct HW_conf{
     bool capture_ins;
 };
 
-struct HW_ctx{
+struct HW_ctx {
     int fd_swi;
     int fd_cyc;
     int fd_cmiss;
@@ -18,7 +28,7 @@ struct HW_ctx{
     HW_conf conf;
 };
 
-struct HW_measure{
+struct HW_measure {
     long long swi;
     long long cyc;
     long long cmiss;
@@ -26,9 +36,102 @@ struct HW_measure{
     long long ins;
 };
 
-void HW_init(HW_ctx *ctx, HW_conf *conf);
-void HW_start(HW_ctx *ctx);
-void HW_stop(HW_ctx *ctx, HW_measure *measure);
-void HW_clean(HW_ctx *ctx);
+struct ArenaRegion {
+    void* start;
+    void* end;
+    void* current;
+    struct ArenaRegion* next;
+};
 
-#endif
+struct Arena {
+    struct ArenaRegion* regions;
+    struct ArenaRegion* current_region;
+    bool growable;
+};
+
+struct perfmon_anchor {
+    const char* name;
+    pthread_mutex_t mutex[PERFMON_MAX_THREADS];
+    struct Arena* results_arena[PERFMON_MAX_THREADS];
+};
+
+enum perfmon_result_type {
+    PERFMON_RESULT_SWI = 0,
+    PERFMON_RESULT_CYC = 1,
+    PERFMON_RESULT_CMISS = 2,
+    PERFMON_RESULT_BMISS = 3,
+    PERFMON_RESULT_INS = 4,
+    PERFMON_RESULT_LAST = 5
+};
+
+struct perfmon_result {
+    enum perfmon_result_type type;
+    uint64_t value;
+};
+
+struct perfmon_flush_header {
+    uint64_t thread_id;
+    uint64_t name_length;
+    uint64_t result_amount;
+};
+
+struct perfmon_profiler {
+    struct perfmon_anchor* anchors;
+    uint64_t anchor_count;
+    bool profiling;
+    FILE* log_file;
+    pthread_mutex_t file_mutex;
+};
+
+// Profiler initialization and cleanup
+void HW_init(struct HW_ctx* ctx, struct HW_conf* conf);
+void HW_start(struct HW_ctx* ctx);
+void HW_stop(struct HW_ctx* ctx, struct HW_measure* measure);
+void HW_clean(struct HW_ctx* ctx);
+
+// Arena management
+struct Arena* arena_create(size_t size, bool growable);
+void* arena_alloc(struct Arena* arena, size_t size);
+void arena_destroy(struct Arena* arena);
+
+// Profiler management
+void perfmon_init_log_file(const char* filename);
+void perfmon_close_log_file(void);
+
+// RAII class for profiling a function or scope
+struct HW_profile {
+    struct HW_ctx ctx;
+    const char* function;
+    uint64_t index;
+    uint64_t flags;
+    uint64_t thread_id;
+
+    HW_profile(const char* function, uint64_t index, uint64_t flags);
+    ~HW_profile();
+};
+
+// Flags for selecting metrics
+enum HW_profile_flags {
+    HW_PROFILE_SWI = 1,
+    HW_PROFILE_CYC = 2,
+    HW_PROFILE_CMISS = 4,
+    HW_PROFILE_BMISS = 8,
+    HW_PROFILE_INS = 16
+};
+
+// Macros for easy profiling
+#define NameConcat2(A, B) A##B
+#define NameConcat(A, B) NameConcat2(A, B)
+#define HWProfileFunction(variable, label) \
+    struct HW_profile variable(label, (uint64_t)(__COUNTER__ + 1), HW_PROFILE_CYC)
+#define HWProfileFunctionF(variable, label, flags) \
+    struct HW_profile variable(label, (uint64_t)(__COUNTER__ + 1), flags)
+
+// RAII class for starting the profiler
+struct HW_profiler_start {
+    struct Arena* profiler_arena;
+    HW_profiler_start(const char* filename);
+    ~HW_profiler_start();
+};
+
+#endif // PERFMON_H

@@ -52,20 +52,17 @@ void thread_workload(int thread_id, int iterations, double* result) {
 }
 
 int main() {
-    HW_ctx ctx = {0};
-    HW_conf conf = {true, true, true, true, true}; // Enable all counters
-    HW_measure measure = {0};
-    HW_init(&ctx, &conf);
+    HW_profiler_start profiler("profile.log");
+
+    HW_profile profile(__FUNCTION__, (uint64_t)(__COUNTER__ + 1), HW_PROFILE_CYC | HW_PROFILE_CMISS | HW_PROFILE_INS);
 
     const int num_threads = std::thread::hardware_concurrency();
     std::cout << "Using " << num_threads << " threads" << std::endl;
 
-    const int iterations = 100000;
+    const int iterations = 1000000; // Increased to 1M iterations
 
     std::vector<std::thread> threads;
     std::vector<double> results(num_threads, 0.0);
-
-    HW_start(&ctx);
 
     for (int i = 0; i < num_threads; ++i) {
         threads.emplace_back(thread_workload, i, iterations, &results[i]);
@@ -75,17 +72,7 @@ int main() {
         t.join();
     }
 
-    HW_stop(&ctx, &measure);
-
-    std::cout << "Performance Counter Results:" << std::endl;
-    std::cout << "Context Switches: " << (measure.swi) << std::endl;
-    std::cout << "CPU Cycles: " << (measure.cyc) << std::endl;
-    std::cout << "Cache Misses: " << (measure.cmiss) << std::endl;
-    std::cout << "Branch Misses: " << (measure.bmiss) << std::endl;
-    std::cout << "Instructions: " << (measure.ins) << std::endl;
-
-    HW_clean(&ctx);
-
+    std::cout << "Profiling complete. Check profile.log." << std::endl;
     std::cout << "Final Shared Counter: " << g_shared_counter << std::endl;
 
     return 0;

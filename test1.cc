@@ -1,31 +1,19 @@
 #include "perfmon.h"
 #include <stdio.h>
 #include <unistd.h>
+#include <iostream>
 
 void my_func_1() {
-  for (int i = 0; i < 1000000; i++) {
+  HWProfileFunctionF(profile, __FUNCTION__, HW_PROFILE_CYC | HW_PROFILE_CMISS | HW_PROFILE_INS | HW_PROFILE_BMISS | HW_PROFILE_SWI);
+  for (int i = 0; i < 10000000; i++) {
     int *a = new int;
     delete a;
   }
 }
 
 int main() {
-    HW_ctx ctx = {0};
-    HW_conf conf = {true, true, true, true, true}; // Enable swi and cyc
-    HW_measure measure = {0};
-    HW_init(&ctx, &conf);
-
-    HW_start(&ctx);
-    for (int i = 0; i < 100; i++) {
-        my_func_1();
-    }
-    
-    HW_stop(&ctx, &measure);
-    printf("swi: %lld\n", measure.swi);
-    printf("cyc: %lld\n", measure.cyc);
-    printf("cmiss: %lld\n", measure.cmiss);
-    printf("bmiss: %lld\n", measure.bmiss);
-    printf("ins: %lld\n", measure.ins);
-    HW_clean(&ctx);
+    HW_profiler_start profiler("profile.log");
+    my_func_1();
+    std::cout << "Profiling complete. Check profile.log." << std::endl;
     return 0;
 }
