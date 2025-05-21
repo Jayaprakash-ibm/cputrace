@@ -52,7 +52,7 @@ void thread_workload(int thread_id, int iterations, double* result) {
 }
 
 int main() {
-    HW_profiler_start profiler("profile.log");
+    HW_profiler_start profiler;
 
     HW_profile profile(__FUNCTION__, (uint64_t)(__COUNTER__ + 1), HW_PROFILE_CYC | HW_PROFILE_CMISS | HW_PROFILE_INS);
 

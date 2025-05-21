@@ -17,12 +17,11 @@ static long perf_event_open(struct perf_event_attr* hw_event, pid_t pid,
                            int cpu, int group_fd, unsigned long flags) {
     long fd = syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
     if (fd == -1) {
-        fprintf(stderr, "perf_event_open failed: %s (errno=%d)\n", strerror(errno), errno);
+        fprintf(stderr, "%s: failed: %s (errno=%d)\n", __func__, strerror(errno), errno);
     }
     return fd;
 }
 
-// Initialize the context with configuration
 void HW_init(struct HW_ctx* ctx, struct HW_conf* conf) {
     ctx->fd_swi = -1;
     ctx->fd_cyc = -1;
@@ -32,7 +31,6 @@ void HW_init(struct HW_ctx* ctx, struct HW_conf* conf) {
     ctx->conf = *conf;
 }
 
-// Start profiling for the given context
 void HW_start(struct HW_ctx* ctx) {
     struct perf_event_attr pe;
 
@@ -43,23 +41,22 @@ void HW_start(struct HW_ctx* ctx) {
             pe.type = PERF_TYPE_SOFTWARE;
             pe.config = PERF_COUNT_SW_CONTEXT_SWITCHES;
             pe.disabled = 1;
-            pe.inherit = 1; // Inherit counters to all threads
+            pe.inherit = 1;
             ctx->fd_swi = perf_event_open(&pe, 0, -1, -1, 0);
             if (ctx->fd_swi != -1) {
-                printf("Opened swi counter, fd=%d\n", ctx->fd_swi);
                 if (ioctl(ctx->fd_swi, PERF_EVENT_IOC_RESET, 0) == -1) {
-                    fprintf(stderr, "ioctl RESET failed for swi: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl RESET failed for swi: %s\n", __func__, strerror(errno));
                 }
                 if (ioctl(ctx->fd_swi, PERF_EVENT_IOC_ENABLE, 0) == -1) {
-                    fprintf(stderr, "ioctl ENABLE failed for swi: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl ENABLE failed for swi: %s\n", __func__, strerror(errno));
                 }
             } else {
                 ctx->conf.capture_swi = false;
-                fprintf(stderr, "Failed to open swi counter\n");
+                fprintf(stderr, "%s: Failed to open swi counter\n", __func__);
             }
         } else {
             if (ioctl(ctx->fd_swi, PERF_EVENT_IOC_RESET, 0) == -1) {
-                fprintf(stderr, "ioctl RESET failed for swi: %s\n", strerror(errno));
+                fprintf(stderr, "%s: ioctl RESET failed for swi: %s\n", __func__, strerror(errno));
             }
         }
     }
@@ -71,23 +68,22 @@ void HW_start(struct HW_ctx* ctx) {
             pe.type = PERF_TYPE_HARDWARE;
             pe.config = PERF_COUNT_HW_CPU_CYCLES;
             pe.disabled = 1;
-            pe.inherit = 1; // Inherit counters to all threads
+            pe.inherit = 1;
             ctx->fd_cyc = perf_event_open(&pe, 0, -1, -1, 0);
             if (ctx->fd_cyc != -1) {
-                printf("Opened cyc counter, fd=%d\n", ctx->fd_cyc);
                 if (ioctl(ctx->fd_cyc, PERF_EVENT_IOC_RESET, 0) == -1) {
-                    fprintf(stderr, "ioctl RESET failed for cyc: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl RESET failed for cyc: %s\n", __func__, strerror(errno));
                 }
                 if (ioctl(ctx->fd_cyc, PERF_EVENT_IOC_ENABLE, 0) == -1) {
-                    fprintf(stderr, "ioctl ENABLE failed for cyc: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl ENABLE failed for cyc: %s\n", __func__, strerror(errno));
                 }
             } else {
                 ctx->conf.capture_cyc = false;
-                fprintf(stderr, "Failed to open cyc counter\n");
+                fprintf(stderr, "%s: Failed to open cyc counter\n", __func__);
             }
         } else {
             if (ioctl(ctx->fd_cyc, PERF_EVENT_IOC_RESET, 0) == -1) {
-                fprintf(stderr, "ioctl RESET failed for cyc: %s\n", strerror(errno));
+                fprintf(stderr, "%s: ioctl RESET failed for cyc: %s\n", __func__, strerror(errno));
             }
         }
     }
@@ -99,23 +95,22 @@ void HW_start(struct HW_ctx* ctx) {
             pe.type = PERF_TYPE_HARDWARE;
             pe.config = PERF_COUNT_HW_CACHE_MISSES;
             pe.disabled = 1;
-            pe.inherit = 1; // Inherit counters to all threads
+            pe.inherit = 1;
             ctx->fd_cmiss = perf_event_open(&pe, 0, -1, -1, 0);
             if (ctx->fd_cmiss != -1) {
-                printf("Opened cmiss counter, fd=%d\n", ctx->fd_cmiss);
                 if (ioctl(ctx->fd_cmiss, PERF_EVENT_IOC_RESET, 0) == -1) {
-                    fprintf(stderr, "ioctl RESET failed for cmiss: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl RESET failed for cmiss: %s\n", __func__, strerror(errno));
                 }
                 if (ioctl(ctx->fd_cmiss, PERF_EVENT_IOC_ENABLE, 0) == -1) {
-                    fprintf(stderr, "ioctl ENABLE failed for cmiss: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl ENABLE failed for cmiss: %s\n", __func__, strerror(errno));
                 }
             } else {
                 ctx->conf.capture_cmiss = false;
-                fprintf(stderr, "Failed to open cmiss counter\n");
+                fprintf(stderr, "%s: Failed to open cmiss counter\n", __func__);
             }
         } else {
             if (ioctl(ctx->fd_cmiss, PERF_EVENT_IOC_RESET, 0) == -1) {
-                fprintf(stderr, "ioctl RESET failed for cmiss: %s\n", strerror(errno));
+                fprintf(stderr, "%s: ioctl RESET failed for cmiss: %s\n", __func__, strerror(errno));
             }
         }
     }
@@ -127,23 +122,22 @@ void HW_start(struct HW_ctx* ctx) {
             pe.type = PERF_TYPE_HARDWARE;
             pe.config = PERF_COUNT_HW_BRANCH_MISSES;
             pe.disabled = 1;
-            pe.inherit = 1; // Inherit counters to all threads
+            pe.inherit = 1;
             ctx->fd_bmiss = perf_event_open(&pe, 0, -1, -1, 0);
             if (ctx->fd_bmiss != -1) {
-                printf("Opened bmiss counter, fd=%d\n", ctx->fd_bmiss);
                 if (ioctl(ctx->fd_bmiss, PERF_EVENT_IOC_RESET, 0) == -1) {
-                    fprintf(stderr, "ioctl RESET failed for bmiss: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl RESET failed for bmiss: %s\n", __func__, strerror(errno));
                 }
                 if (ioctl(ctx->fd_bmiss, PERF_EVENT_IOC_ENABLE, 0) == -1) {
-                    fprintf(stderr, "ioctl ENABLE failed for bmiss: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl ENABLE failed for bmiss: %s\n", __func__, strerror(errno));
                 }
             } else {
                 ctx->conf.capture_bmiss = false;
-                fprintf(stderr, "Failed to open bmiss counter\n");
+                fprintf(stderr, "%s: Failed to open bmiss counter\n", __func__);
             }
         } else {
             if (ioctl(ctx->fd_bmiss, PERF_EVENT_IOC_RESET, 0) == -1) {
-                fprintf(stderr, "ioctl RESET failed for bmiss: %s\n", strerror(errno));
+                fprintf(stderr, "%s: ioctl RESET failed for bmiss: %s\n", __func__, strerror(errno));
             }
         }
     }
@@ -155,98 +149,90 @@ void HW_start(struct HW_ctx* ctx) {
             pe.type = PERF_TYPE_HARDWARE;
             pe.config = PERF_COUNT_HW_INSTRUCTIONS;
             pe.disabled = 1;
-            pe.inherit = 1; // Inherit counters to all threads
+            pe.inherit = 1;
             ctx->fd_ins = perf_event_open(&pe, 0, -1, -1, 0);
             if (ctx->fd_ins != -1) {
-                printf("Opened ins counter, fd=%d\n", ctx->fd_ins);
                 if (ioctl(ctx->fd_ins, PERF_EVENT_IOC_RESET, 0) == -1) {
-                    fprintf(stderr, "ioctl RESET failed for ins: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl RESET failed for ins: %s\n", __func__, strerror(errno));
                 }
                 if (ioctl(ctx->fd_ins, PERF_EVENT_IOC_ENABLE, 0) == -1) {
-                    fprintf(stderr, "ioctl ENABLE failed for ins: %s\n", strerror(errno));
+                    fprintf(stderr, "%s: ioctl ENABLE failed for ins: %s\n", __func__, strerror(errno));
                 }
             } else {
                 ctx->conf.capture_ins = false;
-                fprintf(stderr, "Failed to open ins counter\n");
+                fprintf(stderr, "%s: Failed to open ins counter\n", __func__);
             }
         } else {
             if (ioctl(ctx->fd_ins, PERF_EVENT_IOC_RESET, 0) == -1) {
-                fprintf(stderr, "ioctl RESET failed for ins: %s\n", strerror(errno));
+                fprintf(stderr, "%s: ioctl RESET failed for ins: %s\n", __func__, strerror(errno));
             }
         }
     }
 }
 
-// Stop profiling and collect measurements
 void HW_stop(struct HW_ctx* ctx, struct HW_measure* measure) {
     if (ctx->conf.capture_swi && ctx->fd_swi != -1) {
         if (ioctl(ctx->fd_swi, PERF_EVENT_IOC_DISABLE, 0) == -1) {
-            fprintf(stderr, "ioctl DISABLE failed for swi: %s\n", strerror(errno));
+            fprintf(stderr, "%s: ioctl DISABLE failed for swi: %s\n", __func__, strerror(errno));
         }
         long long value;
         if (read(ctx->fd_swi, &value, sizeof(long long)) == -1) {
-            fprintf(stderr, "read final failed for swi: %s\n", strerror(errno));
+            fprintf(stderr, "%s: read final failed for swi: %s\n", __func__, strerror(errno));
             measure->swi = 0;
         } else {
             measure->swi = value;
-            printf("Read swi: %lld\n", value);
         }
     }
     if (ctx->conf.capture_cyc && ctx->fd_cyc != -1) {
         if (ioctl(ctx->fd_cyc, PERF_EVENT_IOC_DISABLE, 0) == -1) {
-            fprintf(stderr, "ioctl DISABLE failed for cyc: %s\n", strerror(errno));
+            fprintf(stderr, "%s: ioctl DISABLE failed for cyc: %s\n", __func__, strerror(errno));
         }
         long long value;
         if (read(ctx->fd_cyc, &value, sizeof(long long)) == -1) {
-            fprintf(stderr, "read final failed for cyc: %s\n", strerror(errno));
+            fprintf(stderr, "%s: read final failed for cyc: %s\n", __func__, strerror(errno));
             measure->cyc = 0;
         } else {
             measure->cyc = value;
-            printf("Read cyc: %lld\n", value);
         }
     }
     if (ctx->conf.capture_cmiss && ctx->fd_cmiss != -1) {
         if (ioctl(ctx->fd_cmiss, PERF_EVENT_IOC_DISABLE, 0) == -1) {
-            fprintf(stderr, "ioctl DISABLE failed for cmiss: %s\n", strerror(errno));
+            fprintf(stderr, "%s: ioctl DISABLE failed for cmiss: %s\n", __func__, strerror(errno));
         }
         long long value;
         if (read(ctx->fd_cmiss, &value, sizeof(long long)) == -1) {
-            fprintf(stderr, "read final failed for cmiss: %s\n", strerror(errno));
+            fprintf(stderr, "%s: read final failed for cmiss: %s\n", __func__, strerror(errno));
             measure->cmiss = 0;
         } else {
             measure->cmiss = value;
-            printf("Read cmiss: %lld\n", value);
         }
     }
     if (ctx->conf.capture_bmiss && ctx->fd_bmiss != -1) {
         if (ioctl(ctx->fd_bmiss, PERF_EVENT_IOC_DISABLE, 0) == -1) {
-            fprintf(stderr, "ioctl DISABLE failed for bmiss: %s\n", strerror(errno));
+            fprintf(stderr, "%s: ioctl DISABLE failed for bmiss: %s\n", __func__, strerror(errno));
         }
         long long value;
         if (read(ctx->fd_bmiss, &value, sizeof(long long)) == -1) {
-            fprintf(stderr, "read final failed for bmiss: %s\n", strerror(errno));
+            fprintf(stderr, "%s: read final failed for bmiss: %s\n", __func__, strerror(errno));
             measure->bmiss = 0;
         } else {
             measure->bmiss = value;
-            printf("Read bmiss: %lld\n", value);
         }
     }
     if (ctx->conf.capture_ins && ctx->fd_ins != -1) {
         if (ioctl(ctx->fd_ins, PERF_EVENT_IOC_DISABLE, 0) == -1) {
-            fprintf(stderr, "ioctl DISABLE failed for ins: %s\n", strerror(errno));
+            fprintf(stderr, "%s: ioctl DISABLE failed for ins: %s\n", __func__, strerror(errno));
         }
         long long value;
         if (read(ctx->fd_ins, &value, sizeof(long long)) == -1) {
-            fprintf(stderr, "read final failed for ins: %s\n", strerror(errno));
+            fprintf(stderr, "%s: read final failed for ins: %s\n", __func__, strerror(errno));
             measure->ins = 0;
         } else {
             measure->ins = value;
-            printf("Read ins: %lld\n", value);
         }
     }
 }
 
-// Clean up context resources
 void HW_clean(struct HW_ctx* ctx) {
     if (ctx->conf.capture_swi && ctx->fd_swi != -1) {
         ioctl(ctx->fd_swi, PERF_EVENT_IOC_DISABLE, 0);
@@ -279,6 +265,7 @@ void HW_clean(struct HW_ctx* ctx) {
 static struct ArenaRegion* arena_region_create(size_t size) {
     void* start = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (start == MAP_FAILED) {
+        fprintf(stderr, "%s: mmap failed: %s\n", __func__, strerror(errno));
         return NULL;
     }
     struct ArenaRegion* region = (struct ArenaRegion*)malloc(sizeof(struct ArenaRegion));
@@ -302,6 +289,7 @@ static uint64_t arena_region_size(struct ArenaRegion* region) {
 struct Arena* arena_create(size_t size, bool growable) {
     struct ArenaRegion* region = arena_region_create(size);
     if (!region) {
+        fprintf(stderr, "%s: failed to create region\n", __func__);
         return NULL;
     }
     struct Arena* arena = (struct Arena*)malloc(sizeof(struct Arena));
@@ -315,6 +303,7 @@ void* arena_alloc(struct Arena* arena, size_t size) {
     uint64_t possible_end = (uintptr_t)arena->current_region->current + size;
     if (possible_end > (uintptr_t)arena->current_region->end) {
         if (!arena->growable) {
+            fprintf(stderr, "%s: allocation failed, not growable\n", __func__);
             return NULL;
         }
         uint64_t new_size = arena_region_size(arena->current_region);
@@ -323,7 +312,7 @@ void* arena_alloc(struct Arena* arena, size_t size) {
         }
         struct ArenaRegion* new_region = arena_region_create(new_size);
         if (!new_region) {
-            fprintf(stderr, "Error: arena_region_create failed\n");
+            fprintf(stderr, "%s: failed to create new region\n", __func__);
             return NULL;
         }
         arena->current_region->next = new_region;
@@ -345,49 +334,80 @@ void arena_destroy(struct Arena* arena) {
     free(arena);
 }
 
-// Flush profiling data for a thread
+// Flush profiling data for a thread to stdout
 static void perfmon_anchor_thread_flush(struct perfmon_anchor* anchor, uint64_t thread_id) {
     pthread_mutex_lock(&g_profiler.file_mutex);
     struct Arena* arena = anchor->results_arena[thread_id];
-    if (pthread_mutex_trylock(&anchor->mutex[thread_id]) != EBUSY) {
-        fprintf(stderr, "Error: mutex not locked\n");
-        exit(EXIT_FAILURE);
-    }
-    FILE* log_file = g_profiler.log_file;
     uint64_t amount = (uintptr_t)arena->current_region->current - (uintptr_t)arena->current_region->start;
     if (amount > 0) {
-        fprintf(log_file, "Function: %s, Thread: %lu\n", anchor->name, thread_id);
+        printf("\nPerformance counter stats for '%s (thread %lu)':\n\n", anchor->name ? anchor->name : "(null)", thread_id);
+        
+        // Aggregate results to print one value per metric
+        uint64_t swi = 0, cyc = 0, cmiss = 0, bmiss = 0, ins = 0;
         struct perfmon_result* result = (struct perfmon_result*)arena->current_region->start;
         uint64_t count = amount / sizeof(struct perfmon_result);
         for (uint64_t i = 0; i < count; i++) {
-            printf("Flushing result: thread=%lu, type=%d, value=%lu\n", thread_id, result[i].type, result[i].value);
-            const char* metric;
             switch (result[i].type) {
-                case PERFMON_RESULT_SWI: metric = "Context Switches"; break;
-                case PERFMON_RESULT_CYC: metric = "CPU Cycles"; break;
-                case PERFMON_RESULT_CMISS: metric = "Cache Misses"; break;
-                case PERFMON_RESULT_BMISS: metric = "Branch Misses"; break;
-                case PERFMON_RESULT_INS: metric = "Instructions"; break;
-                default: metric = "Unknown"; break;
+                case PERFMON_RESULT_SWI: swi += result[i].value; break;
+                case PERFMON_RESULT_CYC: cyc += result[i].value; break;
+                case PERFMON_RESULT_CMISS: cmiss += result[i].value; break;
+                case PERFMON_RESULT_BMISS: bmiss += result[i].value; break;
+                case PERFMON_RESULT_INS: ins += result[i].value; break;
+                default: break;
             }
-            fprintf(log_file, "  %s: %lu\n", metric, result[i].value);
         }
-        fprintf(log_file, "\n");
-        fflush(log_file); // Ensure data is written to disk
+
+        // Manual comma formatting
+        char buffer[32];
+        auto format_with_commas = [](uint64_t value, char* buf, size_t buf_size) {
+            char temp[32];
+            snprintf(temp, sizeof(temp), "%lu", value);
+            int len = strlen(temp);
+            int commas = len > 3 ? (len - 1) / 3 : 0;
+            int out_len = len + commas;
+            if (out_len >= (int)buf_size) return;
+            buf[out_len] = '\0';
+            int j = out_len - 1;
+            int k = 0;
+            for (int i = len - 1; i >= 0; i--) {
+                buf[j--] = temp[i];
+                k++;
+                if (k % 3 == 0 && i > 0) {
+                    buf[j--] = ',';
+                }
+            }
+            while (j >= 0) buf[j--] = ' ';
+        };
+
+        // Print in a perf-like tabular format with commas
+        format_with_commas(swi, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "context-switches");
+        format_with_commas(cyc, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "cycles");
+        format_with_commas(cmiss, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "cache-misses");
+        format_with_commas(bmiss, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "branch-misses");
+        format_with_commas(ins, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "instructions");
+        printf("\n");
+        fflush(stdout);
     }
     arena->current_region->current = arena->current_region->start;
     pthread_mutex_unlock(&g_profiler.file_mutex);
 }
 
-// Add a profiling result
 static void perfmon_result_add(struct perfmon_anchor* anchor, uint64_t thread_id,
                               enum perfmon_result_type type, uint64_t value) {
-    printf("Adding result: thread=%lu, type=%d, value=%lu\n", thread_id, type, value);
     pthread_mutex_lock(&anchor->mutex[thread_id]);
     struct Arena* arena = anchor->results_arena[thread_id];
     struct perfmon_result* result = (struct perfmon_result*)arena_alloc(arena, sizeof(struct perfmon_result));
     if (!result) {
+        fprintf(stderr, "%s: Arena full, flushing thread=%lu for anchor=%s\n", 
+                __func__, thread_id, anchor->name ? anchor->name : "(null)");
+        pthread_mutex_unlock(&anchor->mutex[thread_id]);
         perfmon_anchor_thread_flush(anchor, thread_id);
+        pthread_mutex_lock(&anchor->mutex[thread_id]);
         result = (struct perfmon_result*)arena_alloc(arena, sizeof(struct perfmon_result));
     }
     result->type = type;
@@ -395,7 +415,6 @@ static void perfmon_result_add(struct perfmon_anchor* anchor, uint64_t thread_id
     pthread_mutex_unlock(&anchor->mutex[thread_id]);
 }
 
-// HW_profile constructor
 HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags) {
     if (!g_profiler.profiling) {
         return;
@@ -428,7 +447,6 @@ HW_profile::~HW_profile() {
     struct HW_measure measure;
     HW_stop(&ctx, &measure);
 
-    // Log raw counter values
     if (flags & HW_PROFILE_SWI) {
         perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_SWI, measure.swi);
     }
@@ -445,23 +463,20 @@ HW_profile::~HW_profile() {
         perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_INS, measure.ins);
     }
 
+    // Flush results immediately to avoid accumulation
+    pthread_mutex_lock(&g_profiler.anchors[index].mutex[thread_id]);
+    perfmon_anchor_thread_flush(&g_profiler.anchors[index], thread_id);
+    pthread_mutex_unlock(&g_profiler.anchors[index].mutex[thread_id]);
+
     HW_clean(&ctx);
 }
 
-// Initialize log file
-void perfmon_init_log_file(const char* filename) {
+void perfmon_init() {
     g_profiler.profiling = true;
-    g_profiler.log_file = fopen(filename, "w"); // Use text mode
-    if (!g_profiler.log_file) {
-        fprintf(stderr, "Error: fopen failed for %s: %s\n", filename, strerror(errno));
-        g_profiler.profiling = false;
-        exit(EXIT_FAILURE);
-    }
     pthread_mutex_init(&g_profiler.file_mutex, NULL);
 }
 
-// Close log file and clean up
-void perfmon_close_log_file() {
+void perfmon_close() {
     g_profiler.profiling = false;
     for (uint64_t i = 0; i < PERFMON_MAX_ANCHORS; i++) {
         for (uint64_t j = 0; j < PERFMON_MAX_THREADS; j++) {
@@ -474,26 +489,21 @@ void perfmon_close_log_file() {
             }
         }
     }
-    if (g_profiler.log_file) {
-        fclose(g_profiler.log_file);
-        g_profiler.log_file = NULL;
-    }
     pthread_mutex_destroy(&g_profiler.file_mutex);
 }
 
 // HW_profiler_start constructor
-HW_profiler_start::HW_profiler_start(const char* filename) {
-    char buffer[1024];
-    snprintf(buffer, sizeof(buffer), "%d-%s", getpid(), filename);
+HW_profiler_start::HW_profiler_start() {
     profiler_arena = arena_create(sizeof(struct perfmon_anchor) * PERFMON_MAX_ANCHORS, true);
     if (!profiler_arena) {
-        fprintf(stderr, "Error: arena_create failed\n");
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "%s: Error: arena_create failed\n", __func__);
+        return;
     }
     g_profiler.anchors = (struct perfmon_anchor*)arena_alloc(profiler_arena, sizeof(struct perfmon_anchor) * PERFMON_MAX_ANCHORS);
     if (!g_profiler.anchors) {
-        fprintf(stderr, "Error: arena_alloc anchors failed\n");
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "%s: Error: arena_alloc anchors failed\n", __func__);
+        arena_destroy(profiler_arena);
+        return;
     }
     memset(g_profiler.anchors, 0, sizeof(struct perfmon_anchor) * PERFMON_MAX_ANCHORS);
     for (uint64_t i = 0; i < PERFMON_MAX_ANCHORS; i++) {
@@ -502,13 +512,14 @@ HW_profiler_start::HW_profiler_start(const char* filename) {
             g_profiler.anchors[i].results_arena[j] = arena_create(20 * 1024 * 1024, false);
         }
     }
-    perfmon_init_log_file(buffer);
+    perfmon_init();
 }
 
 // HW_profiler_start destructor
 HW_profiler_start::~HW_profiler_start() {
     if (g_profiler.profiling) {
-        perfmon_close_log_file();
+        perfmon_close();
         arena_destroy(profiler_arena);
     }
 }
+
