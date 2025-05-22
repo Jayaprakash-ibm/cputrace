@@ -52,6 +52,13 @@ struct perfmon_anchor {
     const char* name;
     pthread_mutex_t mutex[PERFMON_MAX_THREADS];
     struct Arena* results_arena[PERFMON_MAX_THREADS];
+    // Added for averaging
+    uint64_t call_count[PERFMON_MAX_THREADS];
+    uint64_t sum_swi[PERFMON_MAX_THREADS];
+    uint64_t sum_cyc[PERFMON_MAX_THREADS];
+    uint64_t sum_cmiss[PERFMON_MAX_THREADS];
+    uint64_t sum_bmiss[PERFMON_MAX_THREADS];
+    uint64_t sum_ins[PERFMON_MAX_THREADS];
 };
 
 enum perfmon_result_type {
@@ -123,4 +130,3 @@ struct HW_profiler_start {
 };
 
 #endif // PERFMON_H
-

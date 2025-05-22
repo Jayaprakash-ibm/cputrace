@@ -8,6 +8,7 @@
 #include <asm/unistd.h>
 #include <errno.h>
 #include <pthread.h>
+#include <inttypes.h>
 #include "perfmon.h"
 
 static struct perfmon_profiler g_profiler;
@@ -337,81 +338,124 @@ void arena_destroy(struct Arena* arena) {
 // Flush profiling data for a thread to stdout
 static void perfmon_anchor_thread_flush(struct perfmon_anchor* anchor, uint64_t thread_id) {
     pthread_mutex_lock(&g_profiler.file_mutex);
-    struct Arena* arena = anchor->results_arena[thread_id];
-    uint64_t amount = (uintptr_t)arena->current_region->current - (uintptr_t)arena->current_region->start;
-    if (amount > 0) {
-        printf("\nPerformance counter stats for '%s (thread %lu)':\n\n", anchor->name ? anchor->name : "(null)", thread_id);
-        
-        // Aggregate results to print one value per metric
-        uint64_t swi = 0, cyc = 0, cmiss = 0, bmiss = 0, ins = 0;
-        struct perfmon_result* result = (struct perfmon_result*)arena->current_region->start;
-        uint64_t count = amount / sizeof(struct perfmon_result);
-        for (uint64_t i = 0; i < count; i++) {
-            switch (result[i].type) {
-                case PERFMON_RESULT_SWI: swi += result[i].value; break;
-                case PERFMON_RESULT_CYC: cyc += result[i].value; break;
-                case PERFMON_RESULT_CMISS: cmiss += result[i].value; break;
-                case PERFMON_RESULT_BMISS: bmiss += result[i].value; break;
-                case PERFMON_RESULT_INS: ins += result[i].value; break;
-                default: break;
+    if (anchor->call_count[thread_id] == 0) {
+        pthread_mutex_unlock(&g_profiler.file_mutex);
+        return;
+    }
+
+    // Check for potential overflow
+    const uint64_t overflow_threshold = UINT64_MAX / 2;
+    if (anchor->sum_swi[thread_id] > overflow_threshold ||
+        anchor->sum_cyc[thread_id] > overflow_threshold ||
+        anchor->sum_cmiss[thread_id] > overflow_threshold ||
+        anchor->sum_bmiss[thread_id] > overflow_threshold ||
+        anchor->sum_ins[thread_id] > overflow_threshold) {
+        fprintf(stderr, "Warning: Potential overflow in metrics for '%s' (thread %lu)\n",
+                anchor->name ? anchor->name : "(null)", thread_id);
+    }
+
+    printf("\nPerformance counter stats for '%s (thread %lu)' (%" PRIu64 " calls):\n\n",
+           anchor->name ? anchor->name : "(null)", thread_id, anchor->call_count[thread_id]);
+
+    // Format numbers with commas
+    char buffer[32];
+    auto format_uint64_with_commas = [](uint64_t value, char* buf, size_t buf_size) {
+        char temp[32];
+        snprintf(temp, sizeof(temp), "%" PRIu64, value);
+        int len = strlen(temp);
+        int commas = len > 3 ? (len - 1) / 3 : 0;
+        int out_len = len + commas;
+        if (out_len >= (int)buf_size) return;
+        buf[out_len] = '\0';
+        int j = out_len - 1;
+        int k = 0;
+        for (int i = len - 1; i >= 0; i--) {
+            buf[j--] = temp[i];
+            k++;
+            if (k % 3 == 0 && i > 0) {
+                buf[j--] = ',';
             }
         }
+        while (j >= 0) buf[j--] = ' ';
+    };
 
-        // Manual comma formatting
-        char buffer[32];
-        auto format_with_commas = [](uint64_t value, char* buf, size_t buf_size) {
-            char temp[32];
-            snprintf(temp, sizeof(temp), "%lu", value);
-            int len = strlen(temp);
-            int commas = len > 3 ? (len - 1) / 3 : 0;
-            int out_len = len + commas;
-            if (out_len >= (int)buf_size) return;
-            buf[out_len] = '\0';
-            int j = out_len - 1;
-            int k = 0;
-            for (int i = len - 1; i >= 0; i--) {
-                buf[j--] = temp[i];
-                k++;
-                if (k % 3 == 0 && i > 0) {
-                    buf[j--] = ',';
-                }
+    auto format_double_with_commas = [](double value, char* buf, size_t buf_size) {
+        char temp[32];
+        snprintf(temp, sizeof(temp), "%.1f", value);
+        int len = strlen(temp);
+        int dot_pos = len - 2;
+        int whole_len = dot_pos;
+        int commas = whole_len > 3 ? (whole_len - 1) / 3 : 0;
+        int out_len = len + commas;
+        if (out_len >= (int)buf_size) return;
+        buf[out_len] = '\0';
+        int j = out_len - 1;
+        int k = 0;
+        for (int i = len - 1; i >= dot_pos; i--) {
+            buf[j--] = temp[i];
+        }
+        for (int i = dot_pos - 1; i >= 0; i--) {
+            buf[j--] = temp[i];
+            k++;
+            if (k % 3 == 0 && i > 0) {
+                buf[j--] = ',';
             }
-            while (j >= 0) buf[j--] = ' ';
-        };
+        }
+        while (j >= 0) buf[j--] = ' ';
+    };
 
-        // Print in a perf-like tabular format with commas
-        format_with_commas(swi, buffer, sizeof(buffer));
+    // Print non-zero metrics with total and average
+    if (anchor->sum_swi[thread_id] > 0) {
+        format_uint64_with_commas(anchor->sum_swi[thread_id], buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "context-switches");
-        format_with_commas(cyc, buffer, sizeof(buffer));
-        printf(" %15s %s\n", buffer, "cycles");
-        format_with_commas(cmiss, buffer, sizeof(buffer));
-        printf(" %15s %s\n", buffer, "cache-misses");
-        format_with_commas(bmiss, buffer, sizeof(buffer));
-        printf(" %15s %s\n", buffer, "branch-misses");
-        format_with_commas(ins, buffer, sizeof(buffer));
-        printf(" %15s %s\n", buffer, "instructions");
-        printf("\n");
-        fflush(stdout);
+        double avg_swi = static_cast<double>(anchor->sum_swi[thread_id]) / anchor->call_count[thread_id];
+        format_double_with_commas(avg_swi, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "avg context-switches");
     }
-    arena->current_region->current = arena->current_region->start;
+    if (anchor->sum_cyc[thread_id] > 0) {
+        format_uint64_with_commas(anchor->sum_cyc[thread_id], buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "cycles");
+        double avg_cyc = static_cast<double>(anchor->sum_cyc[thread_id]) / anchor->call_count[thread_id];
+        format_double_with_commas(avg_cyc, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "avg cycles");
+    }
+    if (anchor->sum_cmiss[thread_id] > 0) {
+        format_uint64_with_commas(anchor->sum_cmiss[thread_id], buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "cache-misses");
+        double avg_cmiss = static_cast<double>(anchor->sum_cmiss[thread_id]) / anchor->call_count[thread_id];
+        format_double_with_commas(avg_cmiss, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "avg cache-misses");
+    }
+    if (anchor->sum_bmiss[thread_id] > 0) {
+        format_uint64_with_commas(anchor->sum_bmiss[thread_id], buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "branch-misses");
+        double avg_bmiss = static_cast<double>(anchor->sum_bmiss[thread_id]) / anchor->call_count[thread_id];
+        format_double_with_commas(avg_bmiss, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "avg branch-misses");
+    }
+    if (anchor->sum_ins[thread_id] > 0) {
+        format_uint64_with_commas(anchor->sum_ins[thread_id], buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "instructions");
+        double avg_ins = static_cast<double>(anchor->sum_ins[thread_id]) / anchor->call_count[thread_id];
+        format_double_with_commas(avg_ins, buffer, sizeof(buffer));
+        printf(" %15s %s\n", buffer, "avg instructions");
+    }
+    printf("\n");
+    fflush(stdout);
     pthread_mutex_unlock(&g_profiler.file_mutex);
 }
 
 static void perfmon_result_add(struct perfmon_anchor* anchor, uint64_t thread_id,
                               enum perfmon_result_type type, uint64_t value) {
     pthread_mutex_lock(&anchor->mutex[thread_id]);
-    struct Arena* arena = anchor->results_arena[thread_id];
-    struct perfmon_result* result = (struct perfmon_result*)arena_alloc(arena, sizeof(struct perfmon_result));
-    if (!result) {
-        fprintf(stderr, "%s: Arena full, flushing thread=%lu for anchor=%s\n", 
-                __func__, thread_id, anchor->name ? anchor->name : "(null)");
-        pthread_mutex_unlock(&anchor->mutex[thread_id]);
-        perfmon_anchor_thread_flush(anchor, thread_id);
-        pthread_mutex_lock(&anchor->mutex[thread_id]);
-        result = (struct perfmon_result*)arena_alloc(arena, sizeof(struct perfmon_result));
+    switch (type) {
+        case PERFMON_RESULT_SWI: anchor->sum_swi[thread_id] += value; break;
+        case PERFMON_RESULT_CYC: anchor->sum_cyc[thread_id] += value; break;
+        case PERFMON_RESULT_CMISS: anchor->sum_cmiss[thread_id] += value; break;
+        case PERFMON_RESULT_BMISS: anchor->sum_bmiss[thread_id] += value; break;
+        case PERFMON_RESULT_INS: anchor->sum_ins[thread_id] += value; break;
+        default: break;
     }
-    result->type = type;
-    result->value = value;
     pthread_mutex_unlock(&anchor->mutex[thread_id]);
 }
 
@@ -447,6 +491,7 @@ HW_profile::~HW_profile() {
     struct HW_measure measure;
     HW_stop(&ctx, &measure);
 
+    // Add metrics without incrementing call count
     if (flags & HW_PROFILE_SWI) {
         perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_SWI, measure.swi);
     }
@@ -463,9 +508,9 @@ HW_profile::~HW_profile() {
         perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_INS, measure.ins);
     }
 
-    // Flush results immediately to avoid accumulation
+    // Increment call count once per function call
     pthread_mutex_lock(&g_profiler.anchors[index].mutex[thread_id]);
-    perfmon_anchor_thread_flush(&g_profiler.anchors[index], thread_id);
+    g_profiler.anchors[index].call_count[thread_id]++;
     pthread_mutex_unlock(&g_profiler.anchors[index].mutex[thread_id]);
 
     HW_clean(&ctx);
@@ -522,4 +567,3 @@ HW_profiler_start::~HW_profiler_start() {
         arena_destroy(profiler_arena);
     }
 }
-
