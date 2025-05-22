@@ -65,12 +65,17 @@ To run the test:
 Sample output from profiling `BlueStore::_kv_sync_thread`:
 
 ```
-Performance counter stats for '_kv_sync_thread (thread 0)':
+Performance counter stats for '_kv_sync_thread (thread 0)' (6 calls):
 
-         8,501 context-switches
-   912,035,700 cycles
-       394,552 cache-misses
-     3,815,094 branch-misses
-   828,148,000 instructions
+          13,357 context-switches
+         2,226.2 avg context-switches
+   1,396,201,041 cycles
+   232,700,173.5 avg cycles
+         290,241 cache-misses
+        48,373.5 avg cache-misses
+       6,496,508 branch-misses
+     1,082,751.3 avg branch-misses
+   1,233,944,675 instructions
+   205,657,445.8 avg instructions
 ```
 
