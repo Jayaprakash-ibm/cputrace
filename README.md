@@ -48,7 +48,7 @@ The tool collects the following metrics using Linux performance counters:
 
 See the following commit for integration with BlueStore:
 
-https://github.com/ceph/ceph/commit/c3d187fb25608b05cfc117e28b17be5dd082951e
+[commit](https://github.com/ceph/ceph/commit/2f1135b98afdba2034175c6f25a22187d99a2ac0)
 
 To run the test:
 
