@@ -5,7 +5,7 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "perfmon.h"
+#include "cputrace.h"
 
 std::mutex g_mutex;
 int g_shared_counter = 0;

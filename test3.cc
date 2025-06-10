@@ -1,4 +1,4 @@
-#include "perfmon.h"
+#include "cputrace.h"
 #include <iostream>
 
 void my_function() {

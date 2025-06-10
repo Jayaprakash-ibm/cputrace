@@ -9,9 +9,9 @@
 #include <errno.h>
 #include <pthread.h>
 #include <inttypes.h>
-#include "perfmon.h"
+#include "cputrace.h"
 
-static struct perfmon_profiler g_profiler;
+static struct cputrace_profiler g_profiler;
 
 // Syscall wrapper for perf_event_open
 static long perf_event_open(struct perf_event_attr* hw_event, pid_t pid,
@@ -336,7 +336,7 @@ void arena_destroy(struct Arena* arena) {
 }
 
 // Flush profiling data for a thread to stdout
-static void perfmon_anchor_thread_flush(struct perfmon_anchor* anchor, uint64_t thread_id) {
+static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor, uint64_t thread_id) {
     pthread_mutex_lock(&g_profiler.file_mutex);
     if (anchor->call_count[thread_id] == 0) {
         pthread_mutex_unlock(&g_profiler.file_mutex);
@@ -445,15 +445,15 @@ static void perfmon_anchor_thread_flush(struct perfmon_anchor* anchor, uint64_t 
     pthread_mutex_unlock(&g_profiler.file_mutex);
 }
 
-static void perfmon_result_add(struct perfmon_anchor* anchor, uint64_t thread_id,
-                              enum perfmon_result_type type, uint64_t value) {
+static void cputrace_result_add(struct cputrace_anchor* anchor, uint64_t thread_id,
+                              enum cputrace_result_type type, uint64_t value) {
     pthread_mutex_lock(&anchor->mutex[thread_id]);
     switch (type) {
-        case PERFMON_RESULT_SWI: anchor->sum_swi[thread_id] += value; break;
-        case PERFMON_RESULT_CYC: anchor->sum_cyc[thread_id] += value; break;
-        case PERFMON_RESULT_CMISS: anchor->sum_cmiss[thread_id] += value; break;
-        case PERFMON_RESULT_BMISS: anchor->sum_bmiss[thread_id] += value; break;
-        case PERFMON_RESULT_INS: anchor->sum_ins[thread_id] += value; break;
+        case CPUTRACE_RESULT_SWI: anchor->sum_swi[thread_id] += value; break;
+        case CPUTRACE_RESULT_CYC: anchor->sum_cyc[thread_id] += value; break;
+        case CPUTRACE_RESULT_CMISS: anchor->sum_cmiss[thread_id] += value; break;
+        case CPUTRACE_RESULT_BMISS: anchor->sum_bmiss[thread_id] += value; break;
+        case CPUTRACE_RESULT_INS: anchor->sum_ins[thread_id] += value; break;
         default: break;
     }
     pthread_mutex_unlock(&anchor->mutex[thread_id]);
@@ -468,7 +468,7 @@ HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags) {
     this->flags = flags;
 
     // Initialize thread ID
-    this->thread_id = pthread_self() % PERFMON_MAX_THREADS;
+    this->thread_id = pthread_self() % CPUTRACE_MAX_THREADS;
 
     // Set up configuration
     struct HW_conf conf = {0};
@@ -493,19 +493,19 @@ HW_profile::~HW_profile() {
 
     // Add metrics without incrementing call count
     if (flags & HW_PROFILE_SWI) {
-        perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_SWI, measure.swi);
+        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_SWI, measure.swi);
     }
     if (flags & HW_PROFILE_CYC) {
-        perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_CYC, measure.cyc);
+        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_CYC, measure.cyc);
     }
     if (flags & HW_PROFILE_CMISS) {
-        perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_CMISS, measure.cmiss);
+        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_CMISS, measure.cmiss);
     }
     if (flags & HW_PROFILE_BMISS) {
-        perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_BMISS, measure.bmiss);
+        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_BMISS, measure.bmiss);
     }
     if (flags & HW_PROFILE_INS) {
-        perfmon_result_add(&g_profiler.anchors[index], thread_id, PERFMON_RESULT_INS, measure.ins);
+        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_INS, measure.ins);
     }
 
     // Increment call count once per function call
@@ -516,17 +516,17 @@ HW_profile::~HW_profile() {
     HW_clean(&ctx);
 }
 
-void perfmon_init() {
+void cputrace_init() {
     g_profiler.profiling = true;
     pthread_mutex_init(&g_profiler.file_mutex, NULL);
 }
 
-void perfmon_close() {
+void cputrace_close() {
     g_profiler.profiling = false;
-    for (uint64_t i = 0; i < PERFMON_MAX_ANCHORS; i++) {
-        for (uint64_t j = 0; j < PERFMON_MAX_THREADS; j++) {
+    for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
+        for (uint64_t j = 0; j < CPUTRACE_MAX_THREADS; j++) {
             pthread_mutex_lock(&g_profiler.anchors[i].mutex[j]);
-            perfmon_anchor_thread_flush(&g_profiler.anchors[i], j);
+            cputrace_anchor_thread_flush(&g_profiler.anchors[i], j);
             pthread_mutex_unlock(&g_profiler.anchors[i].mutex[j]);
             pthread_mutex_destroy(&g_profiler.anchors[i].mutex[j]);
             if (g_profiler.anchors[i].results_arena[j]) {
@@ -539,31 +539,31 @@ void perfmon_close() {
 
 // HW_profiler_start constructor
 HW_profiler_start::HW_profiler_start() {
-    profiler_arena = arena_create(sizeof(struct perfmon_anchor) * PERFMON_MAX_ANCHORS, true);
+    profiler_arena = arena_create(sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS, true);
     if (!profiler_arena) {
         fprintf(stderr, "%s: Error: arena_create failed\n", __func__);
         return;
     }
-    g_profiler.anchors = (struct perfmon_anchor*)arena_alloc(profiler_arena, sizeof(struct perfmon_anchor) * PERFMON_MAX_ANCHORS);
+    g_profiler.anchors = (struct cputrace_anchor*)arena_alloc(profiler_arena, sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS);
     if (!g_profiler.anchors) {
         fprintf(stderr, "%s: Error: arena_alloc anchors failed\n", __func__);
         arena_destroy(profiler_arena);
         return;
     }
-    memset(g_profiler.anchors, 0, sizeof(struct perfmon_anchor) * PERFMON_MAX_ANCHORS);
-    for (uint64_t i = 0; i < PERFMON_MAX_ANCHORS; i++) {
-        for (uint64_t j = 0; j < PERFMON_MAX_THREADS; j++) {
+    memset(g_profiler.anchors, 0, sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS);
+    for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
+        for (uint64_t j = 0; j < CPUTRACE_MAX_THREADS; j++) {
             pthread_mutex_init(&g_profiler.anchors[i].mutex[j], NULL);
             g_profiler.anchors[i].results_arena[j] = arena_create(20 * 1024 * 1024, false);
         }
     }
-    perfmon_init();
+    cputrace_init();
 }
 
 // HW_profiler_start destructor
 HW_profiler_start::~HW_profiler_start() {
     if (g_profiler.profiling) {
-        perfmon_close();
+        cputrace_close();
         arena_destroy(profiler_arena);
     }
 }

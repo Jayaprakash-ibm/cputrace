@@ -1,5 +1,5 @@
-#ifndef PERFMON_H
-#define PERFMON_H
+#ifndef CPUTRACE_H
+#define CPUTRACE_H
 
 #include <pthread.h>
 #include <stdint.h>
@@ -7,8 +7,8 @@
 #include <linux/perf_event.h>
 
 // Maximum number of threads and anchors (functions) to profile
-#define PERFMON_MAX_THREADS 64
-#define PERFMON_MAX_ANCHORS 128
+#define CPUTRACE_MAX_THREADS 64
+#define CPUTRACE_MAX_ANCHORS 128
 
 struct HW_conf {
     bool capture_swi;
@@ -48,35 +48,35 @@ struct Arena {
     bool growable;
 };
 
-struct perfmon_anchor {
+struct cputrace_anchor {
     const char* name;
-    pthread_mutex_t mutex[PERFMON_MAX_THREADS];
-    struct Arena* results_arena[PERFMON_MAX_THREADS];
+    pthread_mutex_t mutex[CPUTRACE_MAX_THREADS];
+    struct Arena* results_arena[CPUTRACE_MAX_THREADS];
     // Added for averaging
-    uint64_t call_count[PERFMON_MAX_THREADS];
-    uint64_t sum_swi[PERFMON_MAX_THREADS];
-    uint64_t sum_cyc[PERFMON_MAX_THREADS];
-    uint64_t sum_cmiss[PERFMON_MAX_THREADS];
-    uint64_t sum_bmiss[PERFMON_MAX_THREADS];
-    uint64_t sum_ins[PERFMON_MAX_THREADS];
+    uint64_t call_count[CPUTRACE_MAX_THREADS];
+    uint64_t sum_swi[CPUTRACE_MAX_THREADS];
+    uint64_t sum_cyc[CPUTRACE_MAX_THREADS];
+    uint64_t sum_cmiss[CPUTRACE_MAX_THREADS];
+    uint64_t sum_bmiss[CPUTRACE_MAX_THREADS];
+    uint64_t sum_ins[CPUTRACE_MAX_THREADS];
 };
 
-enum perfmon_result_type {
-    PERFMON_RESULT_SWI = 0,
-    PERFMON_RESULT_CYC = 1,
-    PERFMON_RESULT_CMISS = 2,
-    PERFMON_RESULT_BMISS = 3,
-    PERFMON_RESULT_INS = 4,
-    PERFMON_RESULT_LAST = 5
+enum cputrace_result_type {
+    CPUTRACE_RESULT_SWI = 0,
+    CPUTRACE_RESULT_CYC = 1,
+    CPUTRACE_RESULT_CMISS = 2,
+    CPUTRACE_RESULT_BMISS = 3,
+    CPUTRACE_RESULT_INS = 4,
+    CPUTRACE_RESULT_LAST = 5
 };
 
-struct perfmon_result {
-    enum perfmon_result_type type;
+struct cputrace_result {
+    enum cputrace_result_type type;
     uint64_t value;
 };
 
-struct perfmon_profiler {
-    struct perfmon_anchor* anchors;
+struct cputrace_profiler {
+    struct cputrace_anchor* anchors;
     bool profiling;
     pthread_mutex_t file_mutex;
 };
@@ -90,8 +90,8 @@ struct Arena* arena_create(size_t size, bool growable);
 void* arena_alloc(struct Arena* arena, size_t size);
 void arena_destroy(struct Arena* arena);
 
-void perfmon_init(void);
-void perfmon_close(void);
+void cputrace_init(void);
+void cputrace_close(void);
 
 // RAII class for profiling a function or scope
 struct HW_profile {
@@ -129,4 +129,4 @@ struct HW_profiler_start {
     ~HW_profiler_start();
 };
 
-#endif // PERFMON_H
+#endif // CPUTRACE_H
