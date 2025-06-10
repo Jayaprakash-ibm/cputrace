@@ -1,6 +1,6 @@
-# Ceph BlueStore Performance Profiling with `perfmon`
+# Ceph BlueStore Performance Profiling with `cputrace`
 
-This document explains how to use the `perfmon` tool for hardware-level performance profiling and demonstrates its integration into the Ceph storage system, specifically for profiling the `BlueStore::_kv_sync_thread` function.
+This document explains how to use the `cputrace` tool for hardware-level performance profiling and demonstrates its integration into the Ceph storage system, specifically for profiling the `BlueStore::_kv_sync_thread` function.
 
 ## Features
 
@@ -32,16 +32,16 @@ The tool collects the following metrics using Linux performance counters:
 
 1. **Copy Source Files**
 
-   - Obtain `perfmon.cc` and `perfmon.h` from the repository or your project.
+   - Obtain `cputrace.cc` and `cputrace.h` from the repository or your project.
    - Place them in your project directory (e.g., `src/`).
 
 2. **Compile**
 
-   Include `perfmon.cc` in your build system. For example, using `g++`:
+   Include `cputrace.cc` in your build system. For example, using `g++`:
 
    ```bash
-   g++ -c perfmon.cc -o perfmon.o -std=c++11
-   g++ main.cc perfmon.o -o my_program -pthread
+   g++ -c cputrace.cc -o cputrace.o -std=c++11
+   g++ main.cc cputrace.o -o my_program -pthread
    ```
 
 ## Example Usage in BlueStore
