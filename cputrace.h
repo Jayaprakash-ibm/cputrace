@@ -6,8 +6,6 @@
 #include <stdbool.h>
 #include <linux/perf_event.h>
 
-// Maximum number of threads and anchors (functions) to profile
-#define CPUTRACE_MAX_THREADS 64
 #define CPUTRACE_MAX_ANCHORS 128
 
 struct HW_conf {
@@ -50,15 +48,14 @@ struct Arena {
 
 struct cputrace_anchor {
     const char* name;
-    pthread_mutex_t mutex[CPUTRACE_MAX_THREADS];
-    struct Arena* results_arena[CPUTRACE_MAX_THREADS];
-    // Added for averaging
-    uint64_t call_count[CPUTRACE_MAX_THREADS];
-    uint64_t sum_swi[CPUTRACE_MAX_THREADS];
-    uint64_t sum_cyc[CPUTRACE_MAX_THREADS];
-    uint64_t sum_cmiss[CPUTRACE_MAX_THREADS];
-    uint64_t sum_bmiss[CPUTRACE_MAX_THREADS];
-    uint64_t sum_ins[CPUTRACE_MAX_THREADS];
+    pthread_mutex_t mutex;
+    struct Arena* results_arena;
+    uint64_t call_count;
+    uint64_t sum_swi;
+    uint64_t sum_cyc;
+    uint64_t sum_cmiss;
+    uint64_t sum_bmiss;
+    uint64_t sum_ins;
 };
 
 enum cputrace_result_type {
@@ -93,19 +90,16 @@ void arena_destroy(struct Arena* arena);
 void cputrace_init(void);
 void cputrace_close(void);
 
-// RAII class for profiling a function or scope
 struct HW_profile {
     struct HW_ctx ctx;
     const char* function;
     uint64_t index;
     uint64_t flags;
-    uint64_t thread_id;
 
     HW_profile(const char* function, uint64_t index, uint64_t flags);
     ~HW_profile();
 };
 
-// Flags for selecting metrics
 enum HW_profile_flags {
     HW_PROFILE_SWI = 1,
     HW_PROFILE_CYC = 2,
@@ -114,7 +108,6 @@ enum HW_profile_flags {
     HW_PROFILE_INS = 16
 };
 
-// Macros for easy profiling
 #define NameConcat2(A, B) A##B
 #define NameConcat(A, B) NameConcat2(A, B)
 #define HWProfileFunction(variable, label) \
@@ -122,7 +115,6 @@ enum HW_profile_flags {
 #define HWProfileFunctionF(variable, label, flags) \
     struct HW_profile variable(label, (uint64_t)(__COUNTER__ + 1), flags)
 
-// RAII class for starting the profiler
 struct HW_profiler_start {
     struct Arena* profiler_arena;
     HW_profiler_start();

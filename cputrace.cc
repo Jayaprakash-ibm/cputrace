@@ -13,7 +13,6 @@
 
 static struct cputrace_profiler g_profiler;
 
-// Syscall wrapper for perf_event_open
 static long perf_event_open(struct perf_event_attr* hw_event, pid_t pid,
                            int cpu, int group_fd, unsigned long flags) {
     long fd = syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
@@ -262,7 +261,6 @@ void HW_clean(struct HW_ctx* ctx) {
     }
 }
 
-// Arena region management
 static struct ArenaRegion* arena_region_create(size_t size) {
     void* start = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (start == MAP_FAILED) {
@@ -286,7 +284,6 @@ static uint64_t arena_region_size(struct ArenaRegion* region) {
     return (uintptr_t)region->end - (uintptr_t)region->start;
 }
 
-// Arena management
 struct Arena* arena_create(size_t size, bool growable) {
     struct ArenaRegion* region = arena_region_create(size);
     if (!region) {
@@ -335,29 +332,26 @@ void arena_destroy(struct Arena* arena) {
     free(arena);
 }
 
-// Flush profiling data for a thread to stdout
-static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor, uint64_t thread_id) {
+static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor) {
     pthread_mutex_lock(&g_profiler.file_mutex);
-    if (anchor->call_count[thread_id] == 0) {
+    if (anchor->call_count == 0) {
         pthread_mutex_unlock(&g_profiler.file_mutex);
         return;
     }
 
-    // Check for potential overflow
     const uint64_t overflow_threshold = UINT64_MAX / 2;
-    if (anchor->sum_swi[thread_id] > overflow_threshold ||
-        anchor->sum_cyc[thread_id] > overflow_threshold ||
-        anchor->sum_cmiss[thread_id] > overflow_threshold ||
-        anchor->sum_bmiss[thread_id] > overflow_threshold ||
-        anchor->sum_ins[thread_id] > overflow_threshold) {
-        fprintf(stderr, "Warning: Potential overflow in metrics for '%s' (thread %lu)\n",
-                anchor->name ? anchor->name : "(null)", thread_id);
+    if (anchor->sum_swi > overflow_threshold ||
+        anchor->sum_cyc > overflow_threshold ||
+        anchor->sum_cmiss > overflow_threshold ||
+        anchor->sum_bmiss > overflow_threshold ||
+        anchor->sum_ins > overflow_threshold) {
+        fprintf(stderr, "Warning: Potential overflow in metrics for '%s'\n",
+                anchor->name ? anchor->name : "(null)");
     }
 
-    printf("\nPerformance counter stats for '%s (thread %lu)' (%" PRIu64 " calls):\n\n",
-           anchor->name ? anchor->name : "(null)", thread_id, anchor->call_count[thread_id]);
+    printf("\nPerformance counter stats for '%s' ('%" PRIu64 " calls):\n\n",
+           anchor->name ? anchor->name : "(null)", anchor->call_count);
 
-    // Format numbers with commas
     char buffer[32];
     auto format_uint64_with_commas = [](uint64_t value, char* buf, size_t buf_size) {
         char temp[32];
@@ -404,39 +398,38 @@ static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor, uint64_
         while (j >= 0) buf[j--] = ' ';
     };
 
-    // Print non-zero metrics with total and average
-    if (anchor->sum_swi[thread_id] > 0) {
-        format_uint64_with_commas(anchor->sum_swi[thread_id], buffer, sizeof(buffer));
+    if (anchor->sum_swi > 0) {
+        format_uint64_with_commas(anchor->sum_swi, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "context-switches");
-        double avg_swi = static_cast<double>(anchor->sum_swi[thread_id]) / anchor->call_count[thread_id];
+        double avg_swi = static_cast<double>(anchor->sum_swi) / anchor->call_count;
         format_double_with_commas(avg_swi, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "avg context-switches");
     }
-    if (anchor->sum_cyc[thread_id] > 0) {
-        format_uint64_with_commas(anchor->sum_cyc[thread_id], buffer, sizeof(buffer));
+    if (anchor->sum_cyc > 0) {
+        format_uint64_with_commas(anchor->sum_cyc, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "cycles");
-        double avg_cyc = static_cast<double>(anchor->sum_cyc[thread_id]) / anchor->call_count[thread_id];
+        double avg_cyc = static_cast<double>(anchor->sum_cyc) / anchor->call_count;
         format_double_with_commas(avg_cyc, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "avg cycles");
     }
-    if (anchor->sum_cmiss[thread_id] > 0) {
-        format_uint64_with_commas(anchor->sum_cmiss[thread_id], buffer, sizeof(buffer));
+    if (anchor->sum_cmiss > 0) {
+        format_uint64_with_commas(anchor->sum_cmiss, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "cache-misses");
-        double avg_cmiss = static_cast<double>(anchor->sum_cmiss[thread_id]) / anchor->call_count[thread_id];
+        double avg_cmiss = static_cast<double>(anchor->sum_cmiss) / anchor->call_count;
         format_double_with_commas(avg_cmiss, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "avg cache-misses");
     }
-    if (anchor->sum_bmiss[thread_id] > 0) {
-        format_uint64_with_commas(anchor->sum_bmiss[thread_id], buffer, sizeof(buffer));
+    if (anchor->sum_bmiss > 0) {
+        format_uint64_with_commas(anchor->sum_bmiss, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "branch-misses");
-        double avg_bmiss = static_cast<double>(anchor->sum_bmiss[thread_id]) / anchor->call_count[thread_id];
+        double avg_bmiss = static_cast<double>(anchor->sum_bmiss) / anchor->call_count;
         format_double_with_commas(avg_bmiss, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "avg branch-misses");
     }
-    if (anchor->sum_ins[thread_id] > 0) {
-        format_uint64_with_commas(anchor->sum_ins[thread_id], buffer, sizeof(buffer));
+    if (anchor->sum_ins > 0) {
+        format_uint64_with_commas(anchor->sum_ins, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "instructions");
-        double avg_ins = static_cast<double>(anchor->sum_ins[thread_id]) / anchor->call_count[thread_id];
+        double avg_ins = static_cast<double>(anchor->sum_ins) / anchor->call_count;
         format_double_with_commas(avg_ins, buffer, sizeof(buffer));
         printf(" %15s %s\n", buffer, "avg instructions");
     }
@@ -445,18 +438,18 @@ static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor, uint64_
     pthread_mutex_unlock(&g_profiler.file_mutex);
 }
 
-static void cputrace_result_add(struct cputrace_anchor* anchor, uint64_t thread_id,
+static void cputrace_result_add(struct cputrace_anchor* anchor,
                               enum cputrace_result_type type, uint64_t value) {
-    pthread_mutex_lock(&anchor->mutex[thread_id]);
+    pthread_mutex_lock(&anchor->mutex);
     switch (type) {
-        case CPUTRACE_RESULT_SWI: anchor->sum_swi[thread_id] += value; break;
-        case CPUTRACE_RESULT_CYC: anchor->sum_cyc[thread_id] += value; break;
-        case CPUTRACE_RESULT_CMISS: anchor->sum_cmiss[thread_id] += value; break;
-        case CPUTRACE_RESULT_BMISS: anchor->sum_bmiss[thread_id] += value; break;
-        case CPUTRACE_RESULT_INS: anchor->sum_ins[thread_id] += value; break;
+        case CPUTRACE_RESULT_SWI: anchor->sum_swi += value; break;
+        case CPUTRACE_RESULT_CYC: anchor->sum_cyc += value; break;
+        case CPUTRACE_RESULT_CMISS: anchor->sum_cmiss += value; break;
+        case CPUTRACE_RESULT_BMISS: anchor->sum_bmiss += value; break;
+        case CPUTRACE_RESULT_INS: anchor->sum_ins += value; break;
         default: break;
     }
-    pthread_mutex_unlock(&anchor->mutex[thread_id]);
+    pthread_mutex_unlock(&anchor->mutex);
 }
 
 HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags) {
@@ -467,10 +460,6 @@ HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags) {
     this->index = index;
     this->flags = flags;
 
-    // Initialize thread ID
-    this->thread_id = pthread_self() % CPUTRACE_MAX_THREADS;
-
-    // Set up configuration
     struct HW_conf conf = {0};
     if (flags & HW_PROFILE_SWI) conf.capture_swi = true;
     if (flags & HW_PROFILE_CYC) conf.capture_cyc = true;
@@ -483,7 +472,6 @@ HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags) {
     HW_start(&ctx);
 }
 
-// HW_profile destructor
 HW_profile::~HW_profile() {
     if (!g_profiler.profiling) {
         return;
@@ -491,27 +479,25 @@ HW_profile::~HW_profile() {
     struct HW_measure measure;
     HW_stop(&ctx, &measure);
 
-    // Add metrics without incrementing call count
     if (flags & HW_PROFILE_SWI) {
-        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_SWI, measure.swi);
+        cputrace_result_add(&g_profiler.anchors[index], CPUTRACE_RESULT_SWI, measure.swi);
     }
     if (flags & HW_PROFILE_CYC) {
-        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_CYC, measure.cyc);
+        cputrace_result_add(&g_profiler.anchors[index], CPUTRACE_RESULT_CYC, measure.cyc);
     }
     if (flags & HW_PROFILE_CMISS) {
-        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_CMISS, measure.cmiss);
+        cputrace_result_add(&g_profiler.anchors[index], CPUTRACE_RESULT_CMISS, measure.cmiss);
     }
     if (flags & HW_PROFILE_BMISS) {
-        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_BMISS, measure.bmiss);
+        cputrace_result_add(&g_profiler.anchors[index], CPUTRACE_RESULT_BMISS, measure.bmiss);
     }
     if (flags & HW_PROFILE_INS) {
-        cputrace_result_add(&g_profiler.anchors[index], thread_id, CPUTRACE_RESULT_INS, measure.ins);
+        cputrace_result_add(&g_profiler.anchors[index], CPUTRACE_RESULT_INS, measure.ins);
     }
 
-    // Increment call count once per function call
-    pthread_mutex_lock(&g_profiler.anchors[index].mutex[thread_id]);
-    g_profiler.anchors[index].call_count[thread_id]++;
-    pthread_mutex_unlock(&g_profiler.anchors[index].mutex[thread_id]);
+    pthread_mutex_lock(&g_profiler.anchors[index].mutex);
+    g_profiler.anchors[index].call_count++;
+    pthread_mutex_unlock(&g_profiler.anchors[index].mutex);
 
     HW_clean(&ctx);
 }
@@ -524,20 +510,17 @@ void cputrace_init() {
 void cputrace_close() {
     g_profiler.profiling = false;
     for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
-        for (uint64_t j = 0; j < CPUTRACE_MAX_THREADS; j++) {
-            pthread_mutex_lock(&g_profiler.anchors[i].mutex[j]);
-            cputrace_anchor_thread_flush(&g_profiler.anchors[i], j);
-            pthread_mutex_unlock(&g_profiler.anchors[i].mutex[j]);
-            pthread_mutex_destroy(&g_profiler.anchors[i].mutex[j]);
-            if (g_profiler.anchors[i].results_arena[j]) {
-                arena_destroy(g_profiler.anchors[i].results_arena[j]);
-            }
+        pthread_mutex_lock(&g_profiler.anchors[i].mutex);
+        cputrace_anchor_thread_flush(&g_profiler.anchors[i]);
+        pthread_mutex_unlock(&g_profiler.anchors[i].mutex);
+        pthread_mutex_destroy(&g_profiler.anchors[i].mutex);
+        if (g_profiler.anchors[i].results_arena) {
+            arena_destroy(g_profiler.anchors[i].results_arena);
         }
-    }
+     }
     pthread_mutex_destroy(&g_profiler.file_mutex);
 }
 
-// HW_profiler_start constructor
 HW_profiler_start::HW_profiler_start() {
     profiler_arena = arena_create(sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS, true);
     if (!profiler_arena) {
@@ -552,15 +535,12 @@ HW_profiler_start::HW_profiler_start() {
     }
     memset(g_profiler.anchors, 0, sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS);
     for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
-        for (uint64_t j = 0; j < CPUTRACE_MAX_THREADS; j++) {
-            pthread_mutex_init(&g_profiler.anchors[i].mutex[j], NULL);
-            g_profiler.anchors[i].results_arena[j] = arena_create(20 * 1024 * 1024, false);
-        }
+        pthread_mutex_init(&g_profiler.anchors[i].mutex, NULL);
+        g_profiler.anchors[i].results_arena = arena_create(20 * 1024 * 1024, false);
     }
     cputrace_init();
 }
 
-// HW_profiler_start destructor
 HW_profiler_start::~HW_profiler_start() {
     if (g_profiler.profiling) {
         cputrace_close();
