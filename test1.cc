@@ -12,7 +12,6 @@ void my_func_1() {
 }
 
 int main() {
-    HW_profiler_start profiler;
     for(int i = 0; i < 10; i++)
     	my_func_1();
     std::cout << "Profiling complete. Check profile.log." << std::endl;

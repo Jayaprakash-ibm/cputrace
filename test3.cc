@@ -10,7 +10,6 @@ void my_function() {
 }
 
 int main() {
-    HW_profiler_start profiler;
     my_function();
     std::cout << "Profiling complete. Check profile.log." << std::endl;
     return 0;

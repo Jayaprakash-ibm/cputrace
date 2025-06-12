@@ -87,7 +87,6 @@ struct Arena* arena_create(size_t size, bool growable);
 void* arena_alloc(struct Arena* arena, size_t size);
 void arena_destroy(struct Arena* arena);
 
-void cputrace_init(void);
 void cputrace_close(void);
 
 struct HW_profile {
@@ -114,11 +113,5 @@ enum HW_profile_flags {
     struct HW_profile variable(label, (uint64_t)(__COUNTER__ + 1), HW_PROFILE_CYC)
 #define HWProfileFunctionF(variable, label, flags) \
     struct HW_profile variable(label, (uint64_t)(__COUNTER__ + 1), flags)
-
-struct HW_profiler_start {
-    struct Arena* profiler_arena;
-    HW_profiler_start();
-    ~HW_profiler_start();
-};
 
 #endif // CPUTRACE_H

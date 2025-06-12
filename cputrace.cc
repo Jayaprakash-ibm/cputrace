@@ -11,7 +11,51 @@
 #include <inttypes.h>
 #include "cputrace.h"
 
+// Global profiler instance
 static struct cputrace_profiler g_profiler;
+
+
+static void initialize_profiler() {
+    struct Arena* profiler_arena = arena_create(sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS, true);
+    if (!profiler_arena) {
+        fprintf(stderr, "initialize_profiler: Error: arena_create failed\n");
+        exit(1);
+    }
+    g_profiler.anchors = (struct cputrace_anchor*)arena_alloc(profiler_arena, sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS);
+    if (!g_profiler.anchors) {
+        fprintf(stderr, "initialize_profiler: Error: arena_alloc anchors failed\n");
+        arena_destroy(profiler_arena);
+        exit(1);
+    }
+    memset(g_profiler.anchors, 0, sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS);
+    for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
+        pthread_mutex_init(&g_profiler.anchors[i].mutex, NULL);
+        g_profiler.anchors[i].results_arena = arena_create(20 * 1024 * 1024, false);
+        if (!g_profiler.anchors[i].results_arena) {
+            fprintf(stderr, "initialize_profiler: Error: arena_create for anchor %lu failed\n", i);
+            for (uint64_t j = 0; j < i; j++) {
+                if (g_profiler.anchors[j].results_arena) {
+                    arena_destroy(g_profiler.anchors[j].results_arena);
+                }
+                pthread_mutex_destroy(&g_profiler.anchors[j].mutex);
+            }
+            arena_destroy(profiler_arena);
+            exit(1);
+        }
+    }
+    g_profiler.profiling = true;
+    pthread_mutex_init(&g_profiler.file_mutex, NULL);
+    if (atexit(cputrace_close) != 0) {
+        fprintf(stderr, "initialize_profiler: Error: atexit registration failed\n");
+        cputrace_close();
+        exit(1);
+    }
+}
+
+// Static variable to trigger initialization
+static struct ProfilerInitializer {
+    ProfilerInitializer() { initialize_profiler(); }
+} profiler_initializer;
 
 static long perf_event_open(struct perf_event_attr* hw_event, pid_t pid,
                            int cpu, int group_fd, unsigned long flags) {
@@ -502,12 +546,10 @@ HW_profile::~HW_profile() {
     HW_clean(&ctx);
 }
 
-void cputrace_init() {
-    g_profiler.profiling = true;
-    pthread_mutex_init(&g_profiler.file_mutex, NULL);
-}
-
 void cputrace_close() {
+    if (!g_profiler.profiling) {
+        return;
+    }
     g_profiler.profiling = false;
     for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
         pthread_mutex_lock(&g_profiler.anchors[i].mutex);
@@ -516,34 +558,18 @@ void cputrace_close() {
         pthread_mutex_destroy(&g_profiler.anchors[i].mutex);
         if (g_profiler.anchors[i].results_arena) {
             arena_destroy(g_profiler.anchors[i].results_arena);
+            g_profiler.anchors[i].results_arena = NULL;
         }
-     }
+    }
     pthread_mutex_destroy(&g_profiler.file_mutex);
-}
-
-HW_profiler_start::HW_profiler_start() {
-    profiler_arena = arena_create(sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS, true);
-    if (!profiler_arena) {
-        fprintf(stderr, "%s: Error: arena_create failed\n", __func__);
-        return;
-    }
-    g_profiler.anchors = (struct cputrace_anchor*)arena_alloc(profiler_arena, sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS);
-    if (!g_profiler.anchors) {
-        fprintf(stderr, "%s: Error: arena_alloc anchors failed\n", __func__);
-        arena_destroy(profiler_arena);
-        return;
-    }
-    memset(g_profiler.anchors, 0, sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS);
-    for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
-        pthread_mutex_init(&g_profiler.anchors[i].mutex, NULL);
-        g_profiler.anchors[i].results_arena = arena_create(20 * 1024 * 1024, false);
-    }
-    cputrace_init();
-}
-
-HW_profiler_start::~HW_profiler_start() {
-    if (g_profiler.profiling) {
-        cputrace_close();
-        arena_destroy(profiler_arena);
+    if (g_profiler.anchors) {
+        // Free the profiler arena (contains anchors)
+        struct Arena* profiler_arena = arena_create(sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS, true);
+        if (profiler_arena) {
+            // Reconstruct arena to free anchors
+            profiler_arena->regions->current = g_profiler.anchors;
+            arena_destroy(profiler_arena);
+        }
+        g_profiler.anchors = NULL;
     }
 }
