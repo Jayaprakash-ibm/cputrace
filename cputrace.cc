@@ -14,7 +14,6 @@
 // Global profiler instance
 static struct cputrace_profiler g_profiler;
 
-
 static void initialize_profiler() {
     struct Arena* profiler_arena = arena_create(sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS, true);
     if (!profiler_arena) {
@@ -43,13 +42,8 @@ static void initialize_profiler() {
             exit(1);
         }
     }
-    g_profiler.profiling = true;
+    g_profiler.profiling = false; // Start with profiling disabled
     pthread_mutex_init(&g_profiler.file_mutex, NULL);
-    if (atexit(cputrace_close) != 0) {
-        fprintf(stderr, "initialize_profiler: Error: atexit registration failed\n");
-        cputrace_close();
-        exit(1);
-    }
 }
 
 // Static variable to trigger initialization
@@ -377,9 +371,7 @@ void arena_destroy(struct Arena* arena) {
 }
 
 static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor) {
-    pthread_mutex_lock(&g_profiler.file_mutex);
     if (anchor->call_count == 0) {
-        pthread_mutex_unlock(&g_profiler.file_mutex);
         return;
     }
 
@@ -393,7 +385,7 @@ static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor) {
                 anchor->name ? anchor->name : "(null)");
     }
 
-    printf("\nPerformance counter stats for '%s' ('%" PRIu64 " calls):\n\n",
+    printf("\nPerformance counter stats for '%s' (%" PRIu64 " calls):\n\n",
            anchor->name ? anchor->name : "(null)", anchor->call_count);
 
     char buffer[32];
@@ -479,7 +471,6 @@ static void cputrace_anchor_thread_flush(struct cputrace_anchor* anchor) {
     }
     printf("\n");
     fflush(stdout);
-    pthread_mutex_unlock(&g_profiler.file_mutex);
 }
 
 static void cputrace_result_add(struct cputrace_anchor* anchor,
@@ -546,14 +537,74 @@ HW_profile::~HW_profile() {
     HW_clean(&ctx);
 }
 
-void cputrace_close() {
+void cputrace_start(void) {
+    pthread_mutex_lock(&g_profiler.file_mutex);
+    if (g_profiler.profiling) {
+        fprintf(stderr, "cputrace_start: Profiling already active\n");
+        pthread_mutex_unlock(&g_profiler.file_mutex);
+        return;
+    }
+    g_profiler.profiling = true;
+    printf("Profiling started\n");
+    fflush(stdout);
+    pthread_mutex_unlock(&g_profiler.file_mutex);
+}
+
+void cputrace_stop(void) {
+    pthread_mutex_lock(&g_profiler.file_mutex);
     if (!g_profiler.profiling) {
+        fprintf(stderr, "cputrace_stop: Profiling not active\n");
+        pthread_mutex_unlock(&g_profiler.file_mutex);
         return;
     }
     g_profiler.profiling = false;
+    printf("Profiling stopped\n");
+    fflush(stdout);
+    pthread_mutex_unlock(&g_profiler.file_mutex);
+}
+
+void cputrace_reset(void) {
+    pthread_mutex_lock(&g_profiler.file_mutex);
     for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
         pthread_mutex_lock(&g_profiler.anchors[i].mutex);
-        cputrace_anchor_thread_flush(&g_profiler.anchors[i]);
+        g_profiler.anchors[i].call_count = 0;
+        g_profiler.anchors[i].sum_swi = 0;
+        g_profiler.anchors[i].sum_cyc = 0;
+        g_profiler.anchors[i].sum_cmiss = 0;
+        g_profiler.anchors[i].sum_bmiss = 0;
+        g_profiler.anchors[i].sum_ins = 0;
+        pthread_mutex_unlock(&g_profiler.anchors[i].mutex);
+    }
+    printf("Profiling counters reset\n");
+    fflush(stdout);
+    pthread_mutex_unlock(&g_profiler.file_mutex);
+}
+
+void cputrace_dump(void) {
+    pthread_mutex_lock(&g_profiler.file_mutex);
+    for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
+        pthread_mutex_lock(&g_profiler.anchors[i].mutex);
+        if (g_profiler.anchors[i].name && g_profiler.anchors[i].call_count > 0) {
+            cputrace_anchor_thread_flush(&g_profiler.anchors[i]);
+        }
+        pthread_mutex_unlock(&g_profiler.anchors[i].mutex);
+    }
+    printf("Profiling data dumped\n");
+    fflush(stdout);
+    pthread_mutex_unlock(&g_profiler.file_mutex);
+}
+
+void cputrace_close(void) {
+    pthread_mutex_lock(&g_profiler.file_mutex);
+    if (!g_profiler.anchors) {
+        pthread_mutex_unlock(&g_profiler.file_mutex);
+        return;
+    }
+    for (uint64_t i = 0; i < CPUTRACE_MAX_ANCHORS; i++) {
+        pthread_mutex_lock(&g_profiler.anchors[i].mutex);
+        if (g_profiler.anchors[i].name && g_profiler.anchors[i].call_count > 0) {
+            cputrace_anchor_thread_flush(&g_profiler.anchors[i]);
+        }
         pthread_mutex_unlock(&g_profiler.anchors[i].mutex);
         pthread_mutex_destroy(&g_profiler.anchors[i].mutex);
         if (g_profiler.anchors[i].results_arena) {
@@ -561,15 +612,16 @@ void cputrace_close() {
             g_profiler.anchors[i].results_arena = NULL;
         }
     }
-    pthread_mutex_destroy(&g_profiler.file_mutex);
     if (g_profiler.anchors) {
-        // Free the profiler arena (contains anchors)
         struct Arena* profiler_arena = arena_create(sizeof(struct cputrace_anchor) * CPUTRACE_MAX_ANCHORS, true);
         if (profiler_arena) {
-            // Reconstruct arena to free anchors
             profiler_arena->regions->current = g_profiler.anchors;
             arena_destroy(profiler_arena);
         }
         g_profiler.anchors = NULL;
     }
+    pthread_mutex_destroy(&g_profiler.file_mutex);
+    printf("Profiling closed\n");
+    fflush(stdout);
+    pthread_mutex_unlock(&g_profiler.file_mutex);
 }

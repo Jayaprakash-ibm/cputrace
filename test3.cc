@@ -10,7 +10,11 @@ void my_function() {
 }
 
 int main() {
+    cputrace_start();
     my_function();
+    cputrace_stop();
+    cputrace_dump();
     std::cout << "Profiling complete. Check profile.log." << std::endl;
+    cputrace_close();
     return 0;
 }

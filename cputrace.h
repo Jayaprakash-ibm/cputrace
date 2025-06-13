@@ -87,6 +87,10 @@ struct Arena* arena_create(size_t size, bool growable);
 void* arena_alloc(struct Arena* arena, size_t size);
 void arena_destroy(struct Arena* arena);
 
+void cputrace_start(void);
+void cputrace_stop(void);
+void cputrace_reset(void);
+void cputrace_dump(void);
 void cputrace_close(void);
 
 struct HW_profile {
